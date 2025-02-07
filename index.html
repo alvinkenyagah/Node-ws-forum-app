@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@heroicons/react/outline"></script>
+</head>
+<body class="flex items-center justify-center h-screen bg-gray-100">
+
+    <!-- Username Entry Page -->
+    <div id="usernamePage" class="flex flex-col items-center space-y-4">
+        <h1 class="text-2xl font-bold">Enter Your Name</h1>
+        <input id="usernameInput" type="text" placeholder="Your name" class="p-2 border rounded w-64">
+        <button onclick="enterChat()" class="px-4 py-2 bg-blue-500 text-white rounded">Join Chat</button>
+    </div>
+
+    <!-- Chat Page -->
+    <div id="chatPage" class="hidden w-full max-w-4xl bg-white rounded shadow-lg p-4 flex">
+        
+        <!-- Sidebar for Online Users -->
+        <div class="w-1/4 border-r p-4 bg-gray-50">
+            <h2 class="text-lg font-bold mb-3">Online Users</h2>
+            <div id="onlineUsers" class="space-y-2"></div>
+        </div>
+
+        <!-- Chat Section -->
+        <div class="w-3/4 flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-bold">Chat Room</h2>
+                <button onclick="disconnectChat()" class="px-3 py-1 bg-red-500 text-white rounded">Disconnect</button>
+            </div>
+            <div id="messages" class="h-80 overflow-auto border p-2 bg-gray-50"></div>
+            <div class="flex mt-4">
+                <input id="messageInput" type="text" class="flex-grow p-2 border rounded" placeholder="Type a message...">
+                <button onclick="sendMessage()" class="ml-2 px-4 py-2 bg-green-500 text-white rounded">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let socket;
+        let username = sessionStorage.getItem("username") || "";
+
+        function enterChat() {
+            const input = document.getElementById("usernameInput").value.trim();
+            if (input) {
+                username = input;
+                sessionStorage.setItem("username", username);
+                document.getElementById("usernamePage").classList.add("hidden");
+                document.getElementById("chatPage").classList.remove("hidden");
+
+                connectWebSocket();
+            }
+        }
+
+        function connectWebSocket() {
+            socket = new WebSocket("ws://localhost:8080/ws");
+
+            socket.onopen = () => {
+                socket.send(JSON.stringify({ type: "join", name: username }));
+            };
+
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === "message") {
+                    displayMessage(data);
+                } else if (data.type === "users") {
+                    updateOnlineUsers(data.users);
+                }
+            };
+
+            socket.onclose = () => {
+                displayMessage({ name: "System", content: `${username} has disconnected.`, timestamp: getCurrentTime(), system: true });
+            };
+        }
+
+        function sendMessage() {
+            const input = document.getElementById("messageInput");
+            const content = input.value.trim();
+            if (content) {
+                const message = { type: "message", name: username, content, timestamp: getCurrentTime() };
+                socket.send(JSON.stringify(message));
+                input.value = "";
+            }
+        }
+
+        function displayMessage(msg) {
+            const messagesDiv = document.getElementById("messages");
+            const messageElement = document.createElement("div");
+            messageElement.classList.add("p-2", "border-b");
+
+            if (msg.system) {
+                messageElement.classList.add("text-gray-500", "italic");
+            }
+
+            messageElement.innerHTML = `<span class="text-sm text-gray-500 mr-2">[${msg.timestamp}]</span>
+                                        <span class="font-bold">${msg.name}:</span> ${msg.content}`;
+            messagesDiv.appendChild(messageElement);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function disconnectChat() {
+            if (socket) {
+                socket.send(JSON.stringify({ type: "leave", name: username }));
+                socket.close();
+            }
+            sessionStorage.removeItem("username");
+            document.getElementById("chatPage").classList.add("hidden");
+            document.getElementById("usernamePage").classList.remove("hidden");
+        }
+
+        function updateOnlineUsers(users) {
+            const usersDiv = document.getElementById("onlineUsers");
+            usersDiv.innerHTML = "";
+            users.forEach(user => {
+                const userElement = document.createElement("div");
+                userElement.classList.add("flex", "items-center", "space-x-2");
+                userElement.innerHTML = `
+                    <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 11c2.21 0 4-1.79 4-4S14.21 3 12 3 8 4.79 8 7s1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v1h16v-1c0-2.66-5.33-4-8-4z"></path>
+                    </svg>
+                    <span class="font-medium">${user}</span>
+                `;
+                usersDiv.appendChild(userElement);
+            });
+        }
+
+        function getCurrentTime() {
+            return new Date().toLocaleTimeString();
+        }
+
+        if (username) {
+            document.getElementById("usernamePage").classList.add("hidden");
+            document.getElementById("chatPage").classList.remove("hidden");
+            connectWebSocket();
+        }
+    </script>
+
+</body>
+</html>
