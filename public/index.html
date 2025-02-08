@@ -56,7 +56,7 @@
         }
 
         function connectWebSocket() {
-            socket = new WebSocket("ws://localhost:8080/ws");
+            socket = new WebSocket("ws://node-forum.onrender.com:8080/ws");
 
             socket.onopen = () => {
                 socket.send(JSON.stringify({ type: "join", name: username }));
