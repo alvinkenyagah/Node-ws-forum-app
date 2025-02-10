@@ -3,8 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href='https://img.icons8.com/?size=100&amp;id=VB5h1R8mz5k6&amp;format=png&amp;color=000000'>
     <title>Real-Time Chat</title>
     <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+         #loginbrandimg {
+            display: block;
+            margin: 0 auto;
+            width: 120px; 
+            height: auto; 
+                }
+    </style>
+
+
+
 </head>
 <body class="bg-gray-100 h-screen">
     <!-- Connection Status -->
@@ -15,10 +28,15 @@
     <!-- Username Entry -->
     <div id="usernamePage" class="flex items-center justify-center min-h-screen p-4">
         <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
-            <h1 class="text-2xl font-bold mb-6 text-center">Join Chat</h1>
+
+
+            <img src="https://img.icons8.com/?size=100&amp;id=VB5h1R8mz5k6&amp;format=png&amp;color=000000" alt="https://img.icons8.com/?size=100&amp;id=VB5h1R8mz5k6&amp;format=png&amp;color=000000" id='loginbrandimg' >
+
+
+            <h1 class="text-2xl font-bold mb-6 text-center"><span class="text-sky-500">Join</span> Chat</h1>
             <form id="usernameForm" class="space-y-4" onsubmit="enterChat(event)">
                 <div>
-                    <label for="usernameInput" class="block text-sm font-medium text-gray-700">Username</label>
+                    <label for="usernameInput" class="block text-sm font-bold  text-gray-700">Username</label>
                     <input id="usernameInput" 
                            type="text" 
                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2"
@@ -107,6 +125,7 @@
             </div>
         </div>
     </div>
+    
 
     <script>
         let socket;
@@ -114,7 +133,7 @@
         let reconnectAttempts = 0;
         const maxReconnectAttempts = 5;
         const reconnectDelay = 3000;
-
+    
         function toggleSidebar() {
             const sidebar = document.getElementById('mobileSidebar');
             const overlay = document.getElementById('sidebarOverlay');
@@ -127,7 +146,7 @@
                 overlay.classList.add('hidden');
             }
         }
-
+    
         function showConnectionStatus(message) {
             const status = document.getElementById('connectionStatus');
             status.textContent = message;
@@ -143,14 +162,14 @@
                 status.classList.add('bg-red-500');
             }
         }
-
+    
         function connectWebSocket() {
             showConnectionStatus('Connecting...');
             
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const host = window.location.host;
             socket = new WebSocket(`${protocol}//${host}/ws`);
-
+    
             socket.onopen = () => {
                 showConnectionStatus('Connected!');
                 reconnectAttempts = 0;
@@ -158,7 +177,7 @@
                     socket.send(JSON.stringify({ type: 'join', name: username }));
                 }
             };
-
+    
             socket.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 if (data.type === 'message') {
@@ -167,7 +186,7 @@
                     updateOnlineUsers(data.users);
                 }
             };
-
+    
             socket.onclose = () => {
                 showConnectionStatus('Disconnected');
                 if (reconnectAttempts < maxReconnectAttempts) {
@@ -175,13 +194,41 @@
                     setTimeout(connectWebSocket, reconnectDelay);
                 }
             };
-
+    
             socket.onerror = (error) => {
                 console.error('WebSocket error:', error);
                 showConnectionStatus('Connection error');
             };
         }
-
+    
+        function initializeEventListeners() {
+            // Message form submission
+            const messageForm = document.getElementById('messageForm');
+            messageForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                sendMessage();
+            });
+    
+            // Message input Enter key
+            const messageInput = document.getElementById('messageInput');
+            messageInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    sendMessage();
+                }
+            });
+    
+            // Disconnect button
+            const disconnectButton = document.getElementById('disconnectButton');
+            disconnectButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                disconnectChat();
+            });
+        }
+    
         function enterChat(event) {
             event.preventDefault();
             const input = document.getElementById('usernameInput');
@@ -193,9 +240,8 @@
                 connectWebSocket();
             }
         }
-
-        function sendMessage(event) {
-            event.preventDefault();
+    
+        function sendMessage() {
             const input = document.getElementById('messageInput');
             const content = input.value.trim();
             
@@ -205,9 +251,10 @@
                     content: content
                 }));
                 input.value = '';
+                input.focus();
             }
         }
-
+    
         function displayMessage(msg) {
             const messagesDiv = document.getElementById('messages');
             const messageDiv = document.createElement('div');
@@ -238,7 +285,7 @@
             messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
-
+    
         function updateOnlineUsers(users) {
             const updateUserList = (containerId) => {
                 const usersDiv = document.getElementById(containerId);
@@ -254,12 +301,12 @@
                     usersDiv.appendChild(userDiv);
                 });
             };
-
+    
             // Update both desktop and mobile user lists
             updateUserList('onlineUsers');
             updateUserList('mobileOnlineUsers');
         }
-
+    
         function disconnectChat() {
             if (socket && socket.readyState === WebSocket.OPEN) {
                 socket.close();
@@ -278,13 +325,10 @@
             sidebar.classList.add('-translate-x-full');
             overlay.classList.add('hidden');
         }
-
-        // Handle Enter key in message input
-        document.getElementById('messageInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                document.getElementById('messageForm').dispatchEvent(new Event('submit'));
-            }
+    
+        // Initialize event listeners when the DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeEventListeners();
         });
     </script>
 </body>
