@@ -1,122 +1,159 @@
+// server.js
+const express = require('express');
 const WebSocket = require('ws');
 const http = require('http');
 const moment = require('moment');
+const path = require('path');
 
-// Stores connected clients and their names
-const clients = new Map();
+class ChatServer {
+    constructor() {
+        this.app = express();
+        this.setupExpress();
+        this.server = http.createServer(this.app);
+        this.wss = new WebSocket.Server({ server: this.server });
+        this.clients = new Map();
+        this.messages = [];
+        this.messageLimit = 100;
+        this.setupWebSocket();
+    }
 
-// Stores chat history
-const messages = [];
+    setupExpress() {
+        this.app.use(express.static(path.join(__dirname, 'public')));
+        this.app.get('*', (req, res) => {
+            res.sendFile(path.join(__dirname, 'public', 'index.html'));
+        });
+    }
 
-// Get the current time in the desired format
-function getCurrentTime() {
-    return moment().format("HH:mm:ss");
-}
+    getCurrentTime() {
+        return moment().format('HH:mm:ss');
+    }
 
-// Broadcast message to all clients
-function broadcastMessage(msg) {
-    // Store message in chat history
-    messages.push(msg);
+    broadcastMessage(msg) {
+        this.messages.push(msg);
+        if (this.messages.length > this.messageLimit) {
+            this.messages.shift();
+        }
 
-    // Send message to all connected clients
-    clients.forEach((name, client) => {
-        client.send(JSON.stringify(msg), (err) => {
-            if (err) {
-                console.log('WebSocket error:', err);
-                client.close();
-                clients.delete(client);
+        this.clients.forEach((name, client) => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify(msg), (err) => {
+                    if (err) {
+                        console.error('WebSocket error:', err);
+                        this.handleClientDisconnect(client);
+                    }
+                });
             }
         });
-    });
-}
+    }
 
-// Send online users list to all connected clients
-function broadcastUsers() {
-    const userList = Array.from(clients.values());
-
-    clients.forEach((name, client) => {
-        client.send(JSON.stringify({
+    broadcastUsers() {
+        const userList = Array.from(this.clients.values());
+        const msg = {
             type: 'users',
             users: userList,
-        }), (err) => {
-            if (err) {
-                console.log('Error sending user list:', err);
-                client.close();
-                clients.delete(client);
+        };
+
+        this.clients.forEach((name, client) => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify(msg), (err) => {
+                    if (err) {
+                        console.error('Error sending user list:', err);
+                        this.handleClientDisconnect(client);
+                    }
+                });
             }
         });
-    });
-}
+    }
 
-// WebSocket connection handler
-const wss = new WebSocket.Server({ noServer: true });
-
-wss.on('connection', (ws) => {
-    let name = '';
-
-    // Send chat history to the new client
-    messages.forEach((msg) => {
-        ws.send(JSON.stringify(msg));
-    });
-
-    ws.on('message', (data) => {
-        const msg = JSON.parse(data);
-
-        if (msg.type === 'join') {
-            name = msg.name;
-
-            // Store the client with their name
-            clients.set(ws, name);
-
-            // Notify others about the new user
-            broadcastUsers();
-            broadcastMessage({
-                type: 'message',
-                name: '',
-                content: `${name} has joined the chat`,
-                timestamp: getCurrentTime(),
-                system: true,
-            });
-        } else if (msg.type === 'message') {
-            msg.timestamp = getCurrentTime();
-
-            // Store and broadcast the message
-            broadcastMessage(msg);
-        }
-    });
-
-    ws.on('close', () => {
-        // Remove the client and broadcast updated users list
+    handleClientDisconnect(client) {
+        const name = this.clients.get(client);
         if (name) {
-            clients.delete(ws);
-            broadcastUsers();
-
-            // Notify others about the user leaving
-            broadcastMessage({
+            this.clients.delete(client);
+            this.broadcastUsers();
+            this.broadcastMessage({
                 type: 'message',
                 name: 'System',
                 content: `${name} has left the chat`,
-                timestamp: getCurrentTime(),
+                timestamp: this.getCurrentTime(),
                 system: true,
             });
         }
-    });
-});
+        try {
+            client.close();
+        } catch (err) {
+            console.error('Error closing client connection:', err);
+        }
+    }
 
-// HTTP server to handle WebSocket upgrade
-const server = http.createServer((req, res) => {
-    res.writeHead(404);
-    res.end();
-});
+    setupWebSocket() {
+        this.wss.on('connection', (ws) => {
+            console.log('New client connected');
+            
+            // Send recent chat history
+            this.messages.forEach((msg) => {
+                ws.send(JSON.stringify(msg));
+            });
 
-// Handle WebSocket upgrade requests
-server.on('upgrade', (request, socket, head) => {
-    wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit('connection', ws, request);
-    });
-});
+            let name = '';
+
+            ws.on('message', (data) => {
+                try {
+                    const msg = JSON.parse(data);
+                    
+                    switch (msg.type) {
+                        case 'join':
+                            name = msg.name.trim();
+                            if (!name) return;
+                            
+                            this.clients.set(ws, name);
+                            this.broadcastUsers();
+                            this.broadcastMessage({
+                                type: 'message',
+                                name: 'System',
+                                content: `${name} has joined the chat`,
+                                timestamp: this.getCurrentTime(),
+                                system: true,
+                            });
+                            break;
+
+                        case 'message':
+                            if (!name || !msg.content.trim()) return;
+                            
+                            this.broadcastMessage({
+                                type: 'message',
+                                name: name,
+                                content: msg.content.trim(),
+                                timestamp: this.getCurrentTime()
+                            });
+                            break;
+
+                        default:
+                            console.warn('Unknown message type:', msg.type);
+                    }
+                } catch (err) {
+                    console.error('Error processing message:', err);
+                }
+            });
+
+            ws.on('close', () => {
+                console.log('Client disconnected');
+                this.handleClientDisconnect(ws);
+            });
+
+            ws.on('error', (error) => {
+                console.error('WebSocket error:', error);
+                this.handleClientDisconnect(ws);
+            });
+        });
+    }
+
+    start(port = process.env.PORT || 8080) {
+        this.server.listen(port, () => {
+            console.log(`Server running on port ${port}`);
+        });
+    }
+}
 
 // Start the server
-server.listen(8080, () => {
-    console.log('Server started on :8080');
-});
+const chatServer = new ChatServer();
+chatServer.start();

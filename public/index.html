@@ -3,140 +3,223 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat App</title>
+    <title>Real-Time Chat</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/@heroicons/react/outline"></script>
 </head>
-<body class="flex items-center justify-center h-screen bg-gray-100">
-
-    <!-- Username Entry Page -->
-    <div id="usernamePage" class="flex flex-col items-center space-y-4">
-        <h1 class="text-2xl font-bold">Enter Your Name</h1>
-        <input id="usernameInput" type="text" placeholder="Your name" class="p-2 border rounded w-64">
-        <button onclick="enterChat()" class="px-4 py-2 bg-blue-500 text-white rounded">Join Chat</button>
+<body class="bg-gray-100 h-screen">
+    <!-- Connection Status -->
+    <div id="connectionStatus" class="fixed top-0 left-0 right-0 text-center p-2 bg-yellow-500 text-white hidden">
+        Connecting...
     </div>
 
-    <!-- Chat Page -->
-    <div id="chatPage" class="hidden w-full max-w-4xl bg-white rounded shadow-lg p-4 flex">
-        
-        <!-- Sidebar for Online Users -->
-        <div class="w-1/4 border-r p-4 bg-gray-50">
-            <h2 class="text-lg font-bold mb-3">Online Users</h2>
-            <div id="onlineUsers" class="space-y-2"></div>
+    <!-- Username Entry -->
+    <div id="usernamePage" class="flex items-center justify-center h-screen">
+        <div class="bg-white p-8 rounded-lg shadow-md w-96">
+            <h1 class="text-2xl font-bold mb-6 text-center">Join Chat</h1>
+            <form id="usernameForm" class="space-y-4" onsubmit="enterChat(event)">
+                <div>
+                    <label for="usernameInput" class="block text-sm font-medium text-gray-700">Username</label>
+                    <input id="usernameInput" 
+                           type="text" 
+                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2"
+                           placeholder="Enter your username"
+                           required
+                           minlength="2"
+                           maxlength="20"
+                           pattern="[A-Za-z0-9_-]+">
+                </div>
+                <button type="submit" 
+                        class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Join Chat
+                </button>
+            </form>
         </div>
+    </div>
 
-        <!-- Chat Section -->
-        <div class="w-3/4 flex flex-col">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-lg font-bold">Chat Room</h2>
-                <button onclick="disconnectChat()" class="px-3 py-1 bg-red-500 text-white rounded">Disconnect</button>
+    <!-- Chat Room -->
+    <div id="chatPage" class="hidden h-screen flex flex-col">
+        <div class="flex-1 flex overflow-hidden">
+            <!-- Sidebar -->
+            <div class="w-64 bg-white border-r flex flex-col">
+                <div class="p-4 border-b">
+                    <h2 class="text-lg font-semibold">Online Users</h2>
+                </div>
+                <div id="onlineUsers" class="flex-1 overflow-y-auto p-4 space-y-2"></div>
+                <div class="p-4 border-t">
+                    <button onclick="disconnectChat()" 
+                            class="w-full px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">
+                        Disconnect
+                    </button>
+                </div>
             </div>
-            <div id="messages" class="h-80 overflow-auto border p-2 bg-gray-50"></div>
-            <div class="flex mt-4">
-                <input id="messageInput" type="text" class="flex-grow p-2 border rounded" placeholder="Type a message...">
-                <button onclick="sendMessage()" class="ml-2 px-4 py-2 bg-green-500 text-white rounded">Send</button>
+
+            <!-- Chat Area -->
+            <div class="flex-1 flex flex-col bg-gray-50">
+                <div class="flex-1 overflow-y-auto p-4" id="messages"></div>
+                
+                <!-- Message Input -->
+                <div class="p-4 bg-white border-t">
+                    <form id="messageForm" class="flex space-x-4" onsubmit="sendMessage(event)">
+                        <input type="text" 
+                               id="messageInput"
+                               class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                               placeholder="Type your message..."
+                               required>
+                        <button type="submit"
+                                class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                            Send
+                        </button>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
         let socket;
-        let username = sessionStorage.getItem("username") || "";
+        let username = '';
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+        const reconnectDelay = 3000;
 
-        function enterChat() {
-            const input = document.getElementById("usernameInput").value.trim();
-            if (input) {
-                username = input;
-                sessionStorage.setItem("username", username);
-                document.getElementById("usernamePage").classList.add("hidden");
-                document.getElementById("chatPage").classList.remove("hidden");
-
-                connectWebSocket();
+        function showConnectionStatus(message) {
+            const status = document.getElementById('connectionStatus');
+            status.textContent = message;
+            status.classList.remove('hidden');
+            status.className = status.className.replace(/bg-\w+-500/g, '');
+            
+            if (message.includes('Connected')) {
+                status.classList.add('bg-green-500');
+                setTimeout(() => status.classList.add('hidden'), 2000);
+            } else if (message.includes('Connecting')) {
+                status.classList.add('bg-yellow-500');
+            } else {
+                status.classList.add('bg-red-500');
             }
         }
 
         function connectWebSocket() {
-            socket = new WebSocket("ws://node-forum.onrender.com:8080/ws");
+            showConnectionStatus('Connecting...');
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host;
+            socket = new WebSocket(`${protocol}//${host}/ws`);
 
             socket.onopen = () => {
-                socket.send(JSON.stringify({ type: "join", name: username }));
+                showConnectionStatus('Connected!');
+                reconnectAttempts = 0;
+                if (username) {
+                    socket.send(JSON.stringify({ type: 'join', name: username }));
+                }
             };
 
             socket.onmessage = (event) => {
                 const data = JSON.parse(event.data);
-                if (data.type === "message") {
+                if (data.type === 'message') {
                     displayMessage(data);
-                } else if (data.type === "users") {
+                } else if (data.type === 'users') {
                     updateOnlineUsers(data.users);
                 }
             };
 
             socket.onclose = () => {
-                displayMessage({ name: "System", content: `${username} has disconnected.`, timestamp: getCurrentTime(), system: true });
+                showConnectionStatus('Disconnected');
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    reconnectAttempts++;
+                    setTimeout(connectWebSocket, reconnectDelay);
+                }
+            };
+
+            socket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                showConnectionStatus('Connection error');
             };
         }
 
-        function sendMessage() {
-            const input = document.getElementById("messageInput");
+        function enterChat(event) {
+            event.preventDefault();
+            const input = document.getElementById('usernameInput');
+            username = input.value.trim();
+            
+            if (username) {
+                document.getElementById('usernamePage').classList.add('hidden');
+                document.getElementById('chatPage').classList.remove('hidden');
+                connectWebSocket();
+            }
+        }
+
+        function sendMessage(event) {
+            event.preventDefault();
+            const input = document.getElementById('messageInput');
             const content = input.value.trim();
-            if (content) {
-                const message = { type: "message", name: username, content, timestamp: getCurrentTime() };
-                socket.send(JSON.stringify(message));
-                input.value = "";
+            
+            if (content && socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'message',
+                    content: content
+                }));
+                input.value = '';
             }
         }
 
         function displayMessage(msg) {
-            const messagesDiv = document.getElementById("messages");
-            const messageElement = document.createElement("div");
-            messageElement.classList.add("p-2", "border-b");
-
-            if (msg.system) {
-                messageElement.classList.add("text-gray-500", "italic");
-            }
-
-            messageElement.innerHTML = `<span class="text-sm text-gray-500 mr-2">[${msg.timestamp}]</span>
-                                        <span class="font-bold">${msg.name}:</span> ${msg.content}`;
-            messagesDiv.appendChild(messageElement);
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `mb-4 ${msg.system ? 'text-gray-500 italic' : ''}`;
+            
+            const timestamp = document.createElement('span');
+            timestamp.className = 'text-xs text-gray-500';
+            timestamp.textContent = `[${msg.timestamp}] `;
+            
+            const name = document.createElement('span');
+            name.className = 'font-semibold';
+            name.textContent = msg.name ? `${msg.name}: ` : '';
+            
+            const content = document.createElement('span');
+            content.textContent = msg.content;
+            
+            messageDiv.appendChild(timestamp);
+            messageDiv.appendChild(name);
+            messageDiv.appendChild(content);
+            
+            messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
-        function disconnectChat() {
-            if (socket) {
-                socket.send(JSON.stringify({ type: "leave", name: username }));
-                socket.close();
-            }
-            sessionStorage.removeItem("username");
-            document.getElementById("chatPage").classList.add("hidden");
-            document.getElementById("usernamePage").classList.remove("hidden");
-        }
-
         function updateOnlineUsers(users) {
-            const usersDiv = document.getElementById("onlineUsers");
-            usersDiv.innerHTML = "";
+            const usersDiv = document.getElementById('onlineUsers');
+            usersDiv.innerHTML = '';
+            
             users.forEach(user => {
-                const userElement = document.createElement("div");
-                userElement.classList.add("flex", "items-center", "space-x-2");
-                userElement.innerHTML = `
-                    <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 11c2.21 0 4-1.79 4-4S14.21 3 12 3 8 4.79 8 7s1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v1h16v-1c0-2.66-5.33-4-8-4z"></path>
-                    </svg>
-                    <span class="font-medium">${user}</span>
+                const userDiv = document.createElement('div');
+                userDiv.className = 'flex items-center space-x-2';
+                userDiv.innerHTML = `
+                    <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span class="text-gray-700">${user}</span>
                 `;
-                usersDiv.appendChild(userElement);
+                usersDiv.appendChild(userDiv);
             });
         }
 
-        function getCurrentTime() {
-            return new Date().toLocaleTimeString();
+        function disconnectChat() {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.close();
+            }
+            username = '';
+            document.getElementById('chatPage').classList.add('hidden');
+            document.getElementById('usernamePage').classList.remove('hidden');
+            document.getElementById('usernameInput').value = '';
+            document.getElementById('messages').innerHTML = '';
+            document.getElementById('onlineUsers').innerHTML = '';
         }
 
-        if (username) {
-            document.getElementById("usernamePage").classList.add("hidden");
-            document.getElementById("chatPage").classList.remove("hidden");
-            connectWebSocket();
-        }
+        // Handle Enter key in message input
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                document.getElementById('messageForm').dispatchEvent(new Event('submit'));
+            }
+        });
     </script>
-
 </body>
 </html>
