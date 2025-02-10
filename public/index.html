@@ -8,13 +8,13 @@
 </head>
 <body class="bg-gray-100 h-screen">
     <!-- Connection Status -->
-    <div id="connectionStatus" class="fixed top-0 left-0 right-0 text-center p-2 bg-yellow-500 text-white hidden">
+    <div id="connectionStatus" class="fixed top-0 left-0 right-0 text-center p-2 bg-yellow-500 text-white hidden z-50">
         Connecting...
     </div>
 
     <!-- Username Entry -->
-    <div id="usernamePage" class="flex items-center justify-center h-screen">
-        <div class="bg-white p-8 rounded-lg shadow-md w-96">
+    <div id="usernamePage" class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
             <h1 class="text-2xl font-bold mb-6 text-center">Join Chat</h1>
             <form id="usernameForm" class="space-y-4" onsubmit="enterChat(event)">
                 <div>
@@ -37,39 +37,72 @@
     </div>
 
     <!-- Chat Room -->
-    <div id="chatPage" class="hidden h-screen flex flex-col">
-        <div class="flex-1 flex overflow-hidden">
-            <!-- Sidebar -->
-            <div class="w-64 bg-white border-r flex flex-col">
-                <div class="p-4 border-b">
+    <div id="chatPage" class="hidden h-screen flex flex-col md:flex-row">
+        <!-- Sidebar - Hidden by default on mobile -->
+        <div id="sidebar" class="hidden md:flex md:w-64 bg-white border-r flex-col">
+            <div class="p-4 border-b">
+                <h2 class="text-lg font-semibold">Online Users</h2>
+            </div>
+            <div id="onlineUsers" class="flex-1 overflow-y-auto p-4 space-y-2"></div>
+            <div class="p-4 border-t">
+                <button onclick="disconnectChat()" 
+                        class="w-full px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">
+                    Disconnect
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile Header -->
+        <div class="md:hidden flex items-center justify-between p-4 bg-white border-b">
+            <button onclick="toggleSidebar()" class="text-gray-600 hover:text-gray-900">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
+                </svg>
+            </button>
+            <h1 class="text-lg font-semibold">Chat Room</h1>
+            <div class="w-6"></div> <!-- Spacer for alignment -->
+        </div>
+
+        <!-- Chat Area -->
+        <div class="flex-1 flex flex-col bg-gray-50">
+            <div class="flex-1 overflow-y-auto p-4" id="messages"></div>
+            
+            <!-- Message Input -->
+            <div class="p-2 md:p-4 bg-white border-t">
+                <form id="messageForm" class="flex space-x-2" onsubmit="sendMessage(event)">
+                    <input type="text" 
+                           id="messageInput"
+                           class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 text-base"
+                           placeholder="Type your message..."
+                           required>
+                    <button type="submit"
+                            class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 whitespace-nowrap">
+                        Send
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Mobile Sidebar Overlay -->
+        <div id="sidebarOverlay" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden md:hidden" onclick="toggleSidebar()"></div>
+        
+        <!-- Mobile Sidebar -->
+        <div id="mobileSidebar" class="fixed inset-y-0 left-0 w-64 bg-white transform -translate-x-full transition-transform duration-300 ease-in-out z-50 md:hidden">
+            <div class="h-full flex flex-col">
+                <div class="p-4 border-b flex justify-between items-center">
                     <h2 class="text-lg font-semibold">Online Users</h2>
+                    <button onclick="toggleSidebar()" class="text-gray-600 hover:text-gray-900">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
                 </div>
-                <div id="onlineUsers" class="flex-1 overflow-y-auto p-4 space-y-2"></div>
+                <div class="flex-1 overflow-y-auto p-4 space-y-2" id="mobileOnlineUsers"></div>
                 <div class="p-4 border-t">
                     <button onclick="disconnectChat()" 
                             class="w-full px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">
                         Disconnect
                     </button>
-                </div>
-            </div>
-
-            <!-- Chat Area -->
-            <div class="flex-1 flex flex-col bg-gray-50">
-                <div class="flex-1 overflow-y-auto p-4" id="messages"></div>
-                
-                <!-- Message Input -->
-                <div class="p-4 bg-white border-t">
-                    <form id="messageForm" class="flex space-x-4" onsubmit="sendMessage(event)">
-                        <input type="text" 
-                               id="messageInput"
-                               class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                               placeholder="Type your message..."
-                               required>
-                        <button type="submit"
-                                class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-                            Send
-                        </button>
-                    </form>
                 </div>
             </div>
         </div>
@@ -81,6 +114,19 @@
         let reconnectAttempts = 0;
         const maxReconnectAttempts = 5;
         const reconnectDelay = 3000;
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('mobileSidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            
+            if (sidebar.classList.contains('-translate-x-full')) {
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.remove('hidden');
+            } else {
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+            }
+        }
 
         function showConnectionStatus(message) {
             const status = document.getElementById('connectionStatus');
@@ -165,40 +211,53 @@
         function displayMessage(msg) {
             const messagesDiv = document.getElementById('messages');
             const messageDiv = document.createElement('div');
-            messageDiv.className = `mb-4 ${msg.system ? 'text-gray-500 italic' : ''}`;
             
-            const timestamp = document.createElement('span');
-            timestamp.className = 'text-xs text-gray-500';
-            timestamp.textContent = `[${msg.timestamp}] `;
-            
-            const name = document.createElement('span');
-            name.className = 'font-semibold';
-            name.textContent = msg.name ? `${msg.name}: ` : '';
-            
-            const content = document.createElement('span');
-            content.textContent = msg.content;
-            
-            messageDiv.appendChild(timestamp);
-            messageDiv.appendChild(name);
-            messageDiv.appendChild(content);
+            // Handle system messages differently
+            if (msg.system) {
+                messageDiv.className = 'mb-4 text-center text-gray-500 text-sm italic';
+                messageDiv.textContent = msg.content;
+            } else {
+                messageDiv.className = 'mb-4';
+                
+                const timestamp = document.createElement('span');
+                timestamp.className = 'text-xs text-gray-500';
+                timestamp.textContent = `[${msg.timestamp}] `;
+                
+                const name = document.createElement('span');
+                name.className = 'font-semibold';
+                name.textContent = `${msg.name}: `;
+                
+                const content = document.createElement('span');
+                content.textContent = msg.content;
+                
+                messageDiv.appendChild(timestamp);
+                messageDiv.appendChild(name);
+                messageDiv.appendChild(content);
+            }
             
             messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
         function updateOnlineUsers(users) {
-            const usersDiv = document.getElementById('onlineUsers');
-            usersDiv.innerHTML = '';
-            
-            users.forEach(user => {
-                const userDiv = document.createElement('div');
-                userDiv.className = 'flex items-center space-x-2';
-                userDiv.innerHTML = `
-                    <div class="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span class="text-gray-700">${user}</span>
-                `;
-                usersDiv.appendChild(userDiv);
-            });
+            const updateUserList = (containerId) => {
+                const usersDiv = document.getElementById(containerId);
+                usersDiv.innerHTML = '';
+                
+                users.forEach(user => {
+                    const userDiv = document.createElement('div');
+                    userDiv.className = 'flex items-center space-x-2';
+                    userDiv.innerHTML = `
+                        <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span class="text-gray-700">${user}</span>
+                    `;
+                    usersDiv.appendChild(userDiv);
+                });
+            };
+
+            // Update both desktop and mobile user lists
+            updateUserList('onlineUsers');
+            updateUserList('mobileOnlineUsers');
         }
 
         function disconnectChat() {
@@ -211,6 +270,13 @@
             document.getElementById('usernameInput').value = '';
             document.getElementById('messages').innerHTML = '';
             document.getElementById('onlineUsers').innerHTML = '';
+            document.getElementById('mobileOnlineUsers').innerHTML = '';
+            
+            // Hide mobile sidebar if open
+            const sidebar = document.getElementById('mobileSidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            sidebar.classList.add('-translate-x-full');
+            overlay.classList.add('hidden');
         }
 
         // Handle Enter key in message input
