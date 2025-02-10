@@ -1,9 +1,9 @@
 ## Node-chatting Forum App
-
+https://ws-forum.onrender.com/
 ### Setup
 - `npm install ws`
 - `npm install moment`
-
+- `npm start`
 
 # License
 
